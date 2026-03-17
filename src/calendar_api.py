@@ -1,4 +1,5 @@
 import os.path
+import json
 import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -8,8 +9,8 @@ from dateutil import parser
 import random
 
 class GoogleCalendarManager:
-    def __init__(self, credentials_path='credentials.json', token_path='token.json'):
-        self.scopes = ['https://www.googleapis.com/auth/calendar']
+    def __init__(self, credentials_path='json/credential.json', token_path='json/token.json'):
+        self.scopes = ['https://www.googleapis.com/auth/calendar.events']
         self.credentials_path = credentials_path
         self.token_path = token_path
         self.service = self._authenticate()
@@ -25,7 +26,23 @@ class GoogleCalendarManager:
         elif os.path.exists(self.token_path):
             creds = Credentials.from_authorized_user_file(self.token_path, self.scopes)
 
-        # ... giữ nguyên logic refresh token ...
+        # Nếu token hết hạn nhưng có refresh token → tự động refresh
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        # Nếu chưa có token hợp lệ → chạy OAuth flow để đăng nhập
+        elif not creds or not creds.valid:
+            if not os.path.exists(self.credentials_path):
+                raise FileNotFoundError(
+                    f"❌ Không tìm thấy file '{self.credentials_path}'. "
+                    "Hãy tải credentials từ Google Cloud Console và đặt vào thư mục json/."
+                )
+            flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, self.scopes)
+            creds = flow.run_local_server(port=0)
+        
+        # Lưu token để lần sau không cần đăng nhập lại
+        with open(self.token_path, 'w') as token_file:
+            token_file.write(creds.to_json())
+
         return build('calendar', 'v3', credentials=creds)
 
     def get_upcoming_events(self, days=7):

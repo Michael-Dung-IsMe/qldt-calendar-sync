@@ -26,7 +26,7 @@ def main():
     calendar.sync_events(schedule_data)
     
     print("\n✨ Tuyệt vời! Lịch của bạn đã được cập nhật.")
-    print("Vào Notion Calendar để kiểm tra thành quả nhé!")
+    print("Vào Google Calendar để kiểm tra thành quả nhé!")
 
     # Nếu muốn lấy lịch về file csv thì bỏ comment đoạn code này
     # df = pd.DataFrame(schedule_data)

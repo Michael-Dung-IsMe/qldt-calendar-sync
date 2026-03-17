@@ -27,11 +27,12 @@
 ```
 qldt-calendar-sync/
 ├── app.py                  # Entry point — Điểm khởi chạy chương trình
+├── json/
+│   ├── credential.json     # OAuth 2.0 credentials (Google Cloud Console)
+│   └── token.json          # Token xác thực Google (tự sinh sau lần đăng nhập đầu)
 ├── src/
 │   ├── scraper.py          # Module scraping — Lấy lịch từ QLDT bằng Playwright
 │   └── calendar_api.py     # Module Google Calendar — Xác thực & đồng bộ sự kiện
-├── credentials.json        # OAuth 2.0 credentials (Google Cloud Console)
-├── token.json              # Token xác thực Google (tự sinh sau lần đăng nhập đầu)
 ├── requirements.txt        # Danh sách thư viện Python cần thiết
 ├── .env                    # Biến môi trường (tài khoản QLDT, URL)
 └── .env.example            # Mẫu file .env
@@ -39,14 +40,14 @@ qldt-calendar-sync/
 
 ### Mô tả chi tiết
 
-| File / Thư mục        | Mô tả                                                                                                                      |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `app.py`              | File chính, điều phối luồng: đọc cấu hình → scrape lịch → đồng bộ lên Calendar                                             |
-| `src/scraper.py`      | Class `PTITScraper` — tự động đăng nhập QLDT, điều hướng đến trang _Lịch học theo tuần_, và parse bảng thời khóa biểu      |
-| `src/calendar_api.py` | Class `GoogleCalendarManager` — xác thực OAuth 2.0 với Google, kiểm tra trùng lặp, và tạo sự kiện mới trên Google Calendar |
-| `credentials.json`    | File chứa Client ID & Client Secret từ Google Cloud Console (không được đẩy lên Git)                                       |
-| `token.json`          | File lưu access/refresh token, được tạo tự động sau lần xác thực đầu tiên                                                  |
-| `.env`                | Chứa thông tin đăng nhập QLDT và URL mục tiêu                                                                              |
+| File / Thư mục         | Mô tả                                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `app.py`               | File chính, điều phối luồng: đọc cấu hình → scrape lịch → đồng bộ lên Calendar                                             |
+| `src/scraper.py`       | Class `PTITScraper` — tự động đăng nhập QLDT, điều hướng đến trang _Lịch học theo tuần_, và parse bảng thời khóa biểu      |
+| `src/calendar_api.py`  | Class `GoogleCalendarManager` — xác thực OAuth 2.0 với Google, kiểm tra trùng lặp, và tạo sự kiện mới trên Google Calendar |
+| `json/credential.json` | File chứa Client ID & Client Secret từ Google Cloud Console (không được đẩy lên Git)                                       |
+| `json/token.json`      | File lưu access/refresh token, được tạo tự động sau lần xác thực đầu tiên                                                  |
+| `.env`                 | Chứa thông tin đăng nhập QLDT và URL mục tiêu                                                                              |
 
 ---
 
@@ -124,15 +125,15 @@ TARGET_URL="https://qldt.ptit.edu.vn/"
 python app.py
 ```
 
-> **Lưu ý:** Lần chạy đầu tiên, trình duyệt sẽ mở để bạn xác thực tài khoản Google. Token sẽ được lưu tự động vào `token.json` cho các lần sau.
+> **Lưu ý:** Lần chạy đầu tiên, trình duyệt sẽ mở để bạn xác thực tài khoản Google. Token sẽ được lưu tự động vào `json/token.json` cho các lần sau.
 
 ---
 
 ## ⚙️ Lưu ý thêm
 
-- Chương trình mặc định chạy ở chế độ **có giao diện** (`headless=False`) để bạn có thể quan sát quá trình scraping. Nếu muốn chạy ẩn, thay đổi trong `src/scraper.py`:
+- Chương trình mặc định chạy ở chế độ **ẩn** (`headless=True`) để bạn có thể quan sát quá trình scraping. Nếu muốn chạy có giao diện, thay đổi trong `src/scraper.py`:
   ```python
-  browser = p.chromium.launch(headless=True)
+  browser = p.chromium.launch(headless=False)
   ```
 - Sự kiện được đồng bộ sẽ kèm nhắc nhở **trước 30 phút**.
 - Chương trình tự động kiểm tra **trùng lặp** — chạy lại nhiều lần sẽ không tạo sự kiện bị trùng.

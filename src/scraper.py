@@ -33,11 +33,12 @@ class PTITScraper:
         events = []
         with sync_playwright() as p:
             # Mở trình duyệt (để headless=False để bạn có thể nhìn thấy và nhập Captcha)
-            browser = p.chromium.launch(headless=False) # headless=True để chạy ẩn
+            browser = p.chromium.launch(headless=True) # headless=True để chạy ẩn
             context = browser.new_context()
             page = context.new_page()
             for i in range(0,3):
                 print(f"--- Đang truy cập {self.base_url} ---")
+                time.sleep(2)
                 clear_console()
             # Truy cập trang web
             page.goto(self.base_url)
@@ -52,10 +53,11 @@ class PTITScraper:
             
             # Đợi mạng ổn định sau khi đăng nhập (không còn request nào sau 500ms)
             page.wait_for_load_state("networkidle", timeout=60000)
-            print("✅ Đăng nhập thành công (hoặc đã tải xong trang)!")
+            print("✅ Đăng nhập thành công!")
             
             time.sleep(3) # Delay thêm một chút cho chắc chắn
             print("--- Đang chuyển hướng sang trang Lịch học theo tuần ---")
+            time.sleep(2)
             clear_console()
 
             # 2. Điều hướng tới trang Lịch học theo tuần
