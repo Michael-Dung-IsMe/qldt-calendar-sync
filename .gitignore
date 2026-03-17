@@ -1,0 +1,5 @@
+json/credentials.json
+json/token.json
+.env
+.vscode/
+src/__pycache__/
