@@ -141,7 +141,7 @@ class PTITScraper:
         return {
             'summary': lines[0], # Tên môn học
             'location': next((l for l in lines if "Phòng:" in l), "N/A"),
-            'description': f"GV: {next((l for l in lines if 'GV:' in l), 'N/A')}",
+            'description': f"{next((l for l in lines if 'GV:' in l), 'N/A')}",
             'start': f"{date_str} {start_time}",
             'end': f"{date_str} {end_time}"
         }
