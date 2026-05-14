@@ -3,3 +3,4 @@ json/token.json
 .env
 .vscode/
 src/__pycache__/
+temp.json

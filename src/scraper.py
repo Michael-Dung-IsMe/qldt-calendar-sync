@@ -44,7 +44,7 @@ class PTITScraper:
             page.goto(self.base_url)
 
             # 1. Điền thông tin đăng nhập
-            print("🪧 Điền thông tin đăng nhập...")
+            print("🪧  Điền thông tin đăng nhập...")
             page.fill('input[name="username"]', self.username)
             page.fill('input[name="password"]', self.password)
             page.keyboard.press("Enter")
@@ -128,6 +128,18 @@ class PTITScraper:
         # print(text) # [✅ SUCCESS, ❌ FAIL]
         """Tách thông tin từ nội dung ô và tiêu đề ngày"""
         lines = [line.strip() for line in text.split('\n') if line.strip()]
+        lines.pop(1) # Xoá dòng "Nhóm..."
+
+        # Xử lý dòng "Phòng..." bị lặp
+        pattern = r"\bPhòng: \b|HN|\(Cơ sở Ngọc Trục\)|Cơ sở Ngọc Trục"
+        res = re.sub(pattern, "", lines[1]).replace("  ", " ").replace("()", "").strip()
+        x = round(len(res)/2)
+        if 'LMS' in res:
+            x = len(res)
+        elif 'học' in res:
+            x = 10
+        lines[1] = res[:x]
+        # print(lines[1])
         
         # Trích xuất ngày từ header (Ví dụ: "Thứ 3 (10/03)" -> "10/03/2026")
         date_match = re.search(r'(\d{2}/\d{2})', date_header)
@@ -140,7 +152,7 @@ class PTITScraper:
 
         return {
             'summary': lines[0], # Tên môn học
-            'location': next((l for l in lines if "Phòng:" in l), "N/A"),
+            'location': lines[1],
             'description': f"{next((l for l in lines if 'GV:' in l), 'N/A')}",
             'start': f"{date_str} {start_time}",
             'end': f"{date_str} {end_time}"
