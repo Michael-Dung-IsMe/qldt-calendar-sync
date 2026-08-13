@@ -57,6 +57,18 @@ class GoogleCalendarManager:
         
         return events_result.get('items', [])
 
+    def _to_utc_iso(self, dt_str, dayfirst=False):
+        """Chuyển đổi chuỗi ngày giờ bất kỳ sang dạng UTC ISO format để so sánh chính xác"""
+        try:
+            dt = parser.parse(dt_str, dayfirst=dayfirst)
+            if dt.tzinfo is None:
+                # Nếu không có timezone (ngày giờ naive cào từ web), mặc định là múi giờ Việt Nam (+07:00)
+                tz = datetime.timezone(datetime.timedelta(hours=7))
+                dt = dt.replace(tzinfo=tz)
+            return dt.astimezone(datetime.timezone.utc).isoformat()
+        except Exception:
+            return None
+
     def sync_events(self, web_events):
         """Hàm chính: So sánh và đẩy sự kiện mới lên lịch"""
         print(f"--- Bắt đầu đồng bộ hóa {len(web_events)} buổi học ---")
@@ -64,11 +76,16 @@ class GoogleCalendarManager:
         # 1. Lấy các sự kiện hiện có để tránh trùng
         existing_events = self.get_upcoming_events(days=30) # Kiểm tra trong 1 tháng tới
         
-        # Tạo một 'set' các sự kiện hiện có (Tên + Thời gian bắt đầu) để tra cứu nhanh
-        existing_lookup = {
-            (e['summary'], e['start'].get('dateTime', e['start'].get('date'))) 
-            for e in existing_events
-        }
+        # Tạo một 'set' các sự kiện hiện có (Tên + Thời gian bắt đầu đã chuẩn hóa UTC) để tra cứu nhanh
+        existing_lookup = set()
+        for e in existing_events:
+            summary = e.get('summary')
+            start_info = e.get('start', {})
+            dt_str = start_info.get('dateTime', start_info.get('date'))
+            if summary and dt_str:
+                utc_str = self._to_utc_iso(dt_str)
+                if utc_str:
+                    existing_lookup.add((summary, utc_str))
 
         count_added = 0
         for event_data in web_events:
@@ -77,12 +94,13 @@ class GoogleCalendarManager:
             try:
                 start_dt = parser.parse(event_data['start'], dayfirst=True).isoformat()
                 end_dt = parser.parse(event_data['end'], dayfirst=True).isoformat()
+                start_utc = self._to_utc_iso(event_data['start'], dayfirst=True)
             except Exception as e:
                 print(f"❌ Lỗi định dạng ngày tháng: {event_data['start']} - {e}")
                 continue
 
-            # Kiểm tra trùng lặp
-            if (event_data['summary'], start_dt + "+07:00") in existing_lookup:
+            # Kiểm tra trùng lặp (so sánh qua định dạng UTC)
+            if start_utc and (event_data['summary'], start_utc) in existing_lookup:
                 print(f"⏭️ Bỏ qua (đã tồn tại): {event_data['summary']} lúc {event_data['start']}")
                 continue
 

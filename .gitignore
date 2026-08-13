@@ -2,5 +2,6 @@ json/credential.json
 json/token.json
 .env
 .vscode/
+qldt_sample/
 src/__pycache__/
 temp.json

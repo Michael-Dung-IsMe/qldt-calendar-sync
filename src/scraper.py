@@ -73,21 +73,24 @@ class PTITScraper:
             ## 3.1 Lấy danh sách ngày trong tuần từ hàng đầu tiên (bỏ cột đầu/cuối là mũi tên)
             header_cells = rows[0].query_selector_all("td")
             dates = [cell.inner_text().strip() for cell in header_cells[1:-1]]
-            # print(dates) # Kiểm tra xem có ra đúng ngày tháng không - [✅ SUCCESS, ❌ FAIL]
 
-            ## 3.2 Khởi tạo lưới ảo để xử lý rowspan
-            # print(len(rows))
-            num_rows = len(rows) - MAX_IGNORED_ROWS
+            ## 3.2 Khử và lọc các dòng chứa dữ liệu tiết học thực sự (bỏ qua header/footer/điều hướng)
+            data_rows = []
+            for r in rows:
+                tds = r.query_selector_all("td")
+                if tds:
+                    first_cell_text = tds[0].inner_text().strip()
+                    if first_cell_text.startswith("Tiết"):
+                        data_rows.append(r)
+
+            num_rows = len(data_rows)
             num_cols = len(dates)
-            # print(num_rows, num_cols) # [✅ SUCCESS, ❌ FAIL]
             virtual_grid = [[False for _ in range(num_cols)] for _ in range(num_rows)]
-            # print(virtual_grid) # [✅ SUCCESS, ❌ FAIL]
 
             events = []
 
-            ## 3.3 Duyệt qua từng hàng dữ liệu (Tiết 1 -> Tiết 9)
-            for r_idx in range(1, num_rows):
-                row = rows[r_idx]
+            ## 3.3 Duyệt qua từng hàng dữ liệu tiết học
+            for r_idx, row in enumerate(data_rows):
                 tds = row.query_selector_all("td")
 
                 # Bỏ td đầu tiên (tên tiết) và cột cuối cùng (Giờ)
@@ -97,63 +100,122 @@ class PTITScraper:
                 # Xử lý rowspan
                 for c_idx in range(num_cols):
                     # Nếu ô này đã bị chiếm bởi rowspan từ hàng trên -> bỏ qua cột này
-                    if virtual_grid[r_idx-1][c_idx]:
+                    if virtual_grid[r_idx][c_idx]:
                         continue
 
                     if td_pointer < len(data_tds):
                         td = data_tds[td_pointer]
                         content = td.inner_text().strip()
-                        # print(content)
                         
                         # Kiểm tra rowspan
                         rowspan = int(td.get_attribute("rowspan") or 1)
                         if rowspan > 1:
                             for i in range(rowspan):
-                                if r_idx - 1 + i < num_rows:
-                                    virtual_grid[r_idx - 1 + i][c_idx] = True
+                                if r_idx + i < num_rows:
+                                    virtual_grid[r_idx + i][c_idx] = True
 
-                        # Nếu có nội dung môn học (có chữ "DS sinh viên")
+                        # Nếu có nội dung môn học (không rỗng)
                         if content != "":
                             event = self._parse_cell_content(content, dates[c_idx])
-                            events.append(event)
+                            if event:
+                                events.append(event)
 
                         # Tăng con trỏ để sang ô tiếp theo
                         td_pointer += 1
-            # print(virtual_grid) # [✅ SUCCESS, ❌ FAIL]
             browser.close()
         return events
 
 
     def _parse_cell_content(self, text, date_header):
-        # print(text) # [✅ SUCCESS, ❌ FAIL]
         """Tách thông tin từ nội dung ô và tiêu đề ngày"""
         lines = [line.strip() for line in text.split('\n') if line.strip()]
-        lines.pop(1) # Xoá dòng "Nhóm..."
-
-        # Xử lý dòng "Phòng..." bị lặp
-        pattern = r"\bPhòng: \b|HN|\(Cơ sở Ngọc Trục\)|Cơ sở Ngọc Trục"
-        res = re.sub(pattern, "", lines[1]).replace("  ", " ").replace("()", "").strip()
-        x = round(len(res)/2)
-        if 'LMS' in res:
-            x = len(res)
-        elif 'học' in res:
-            x = 10
-        lines[1] = res[:x]
-        # print(lines[1])
+        if len(lines) < 2:
+            return None
+            
+        summary = lines[0] # Tên môn học
+        
+        # Lấy mã môn học nếu có ở dòng tiếp theo hoặc trong tiêu đề môn học
+        course_code = ""
+        match_code = re.search(r'\(([^)]+)\)$', summary)
+        if match_code:
+            course_code = match_code.group(1)
+            summary = summary[:match_code.start()].strip()
+        elif len(lines) > 1 and lines[1].startswith('(') and lines[1].endswith(')'):
+            course_code = lines[1].strip('()')
+            
+        # Tìm động các thông tin khác trong các dòng
+        group = ""
+        location = ""
+        teacher = ""
+        start_time = "00:00"
+        end_time = "00:00"
+        
+        for idx, line in enumerate(lines):
+            line_str = line.strip()
+            if line_str.startswith("Nhóm:"):
+                val = line_str.replace("Nhóm:", "").strip()
+                if val:
+                    group = val
+                elif idx + 1 < len(lines):
+                    group = lines[idx + 1].strip()
+            elif line_str.startswith("Phòng:"):
+                val = line_str.replace("Phòng:", "").strip()
+                if val:
+                    location = val
+                elif idx + 1 < len(lines):
+                    location = lines[idx + 1].strip()
+            elif line_str.startswith("GV:"):
+                val = line_str.replace("GV:", "").strip()
+                if val:
+                    teacher = val
+                elif idx + 1 < len(lines):
+                    teacher = lines[idx + 1].strip()
+            elif line_str.startswith('->') or re.match(r'^->\s*\d{2}:\d{2}$', line_str):
+                end_time = line_str.replace('->', '').strip()
+            elif "->" in line_str:
+                parts = [p.strip() for p in line_str.split("->")]
+                if len(parts) == 2:
+                    start_time = parts[0].strip()
+                    end_time = parts[1].strip()
+            elif re.match(r'^\d{2}:\d{2}$', line_str):
+                start_time = line_str
+                
+        # Làm sạch thông tin phòng học
+        if location:
+            # Xử lý dạng trùng lặp như 505-A1-505-A1 (HN) thành 505-A1 (HN)
+            parts = location.split(' ')
+            room_part = parts[0]
+            sub_parts = room_part.split('-')
+            if len(sub_parts) == 4 and sub_parts[0] == sub_parts[2] and sub_parts[1] == sub_parts[3]:
+                room_part = f"{sub_parts[0]}-{sub_parts[1]}"
+                parts[0] = room_part
+                location = ' '.join(parts)
+            
+            # Khử bớt các chữ thừa không cần thiết
+            location = re.sub(r'\(HN\)|HN', '', location).strip()
+            location = re.sub(r'\s+', ' ', location)
         
         # Trích xuất ngày từ header (Ví dụ: "Thứ 3 (10/03)" -> "10/03/2026")
         date_match = re.search(r'(\d{2}/\d{2})', date_header)
         date_str = f"{date_match.group(1)}/{THIS_YEAR}" if date_match else ""
 
-        # Trích xuất giờ từ nội dung (Ví dụ: "07:00 -> 08:50")
-        time_match = re.search(r'(\d{2}:\d{2})\s*->\s*(\d{2}:\d{2})', text)
-        start_time = time_match.group(1) if time_match else "00:00"
-        end_time = time_match.group(2) if time_match else "00:00"
+        # Tạo phần mô tả sự kiện chi tiết
+        desc_parts = []
+        if course_code:
+            desc_parts.append(f"Mã môn: {course_code}")
+        if group:
+            desc_parts.append(f"Nhóm: {group}")
+        if teacher:
+            desc_parts.append(f"GV: {teacher}")
+        description = "\n".join(desc_parts)
+
+        # Trả về summary chứa cả mã môn học để tương thích tốt với hiển thị trên Google Calendar
+        event_summary = f"{summary} ({course_code})" if course_code else summary
 
         return {
-            'summary': lines[0], # Tên môn học
-            'location': lines[1],
-            'description': f"{next((l for l in lines if 'GV:' in l), 'N/A')}",
+            'summary': event_summary,
+            'location': location,
+            'description': description,
             'start': f"{date_str} {start_time}",
             'end': f"{date_str} {end_time}"
         }
